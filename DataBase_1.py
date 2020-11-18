@@ -23,10 +23,6 @@ from CombinedAttributesAdder import CombinedAttributesAdder
 from datetime import datetime
 from dateutil import parser, rrule
 from sklearn.compose import ColumnTransformer
-import statsmodels.api as sm
-
-pd.options.mode.chained_assignment = None  # default='warn'
-
 
 #from dateutil.rrule import YEARLY, MONTHLY, WEEKLY, DAILY
 #from dateutil.rrule import HOURLY, MINUTELY, SECONDLY
@@ -187,55 +183,22 @@ class DataBase():
         your_csv_file.close()
         return pd.read_csv(csv_path)
     # Funcion que carga data 
-    # caso 0: La data se carga desde un archivo local csv (nombre del archivo lo definde "archivo")
-      # archivo: indice de la lista stations. indica el nombre del archivp ´pr stacion
-      # por defecto es la primera estation en la lista
+    # caso 0: La data se carga desde un archivo local csv
     # caso 1: La data se descarga de Internet y almacena en un csv
-    def cargar_data(self,caso,stations,fecha=["2018-01-01","2019-12-31"],archivo=0):
-      fechaInicio=fecha[0]
-      fechaFinal = fecha[1]
-      if  (caso=="externa"):
-        self.data = self.fetch_housing_data(stations, fechaInicio, fechaFinal)
-        if(len(stations) > archivo):
-            nombre = "{}_weather.csv".format(stations[archivo].replace(":","_"))
-            self.data = self.load_weather_data(nombre)
-      elif (caso =="local"):
-        if (len(stations) > archivo):
-            nombre = "{}_weather.csv".format(stations[archivo].replace(":","_"))
-            self.data = self.load_weather_data(nombre)
-            self.fechaInicio = fechaInicio
-            self.fechaFinal = fechaFinal
-        self.data = self.get_data_fecha(self.data,fecha)
-      return self.data
-    # Funcion que devuelve la data segun la fecha dada
-    def get_data_fecha(self,df,fecha):
-      if not "fecha" in df.columns:
-        fecha_inicio = datetime.fromtimestamp(df.iloc[0]["valid_time_gmt"])
-        fecha_fin = datetime.fromtimestamp(df.iloc[-1]["valid_time_gmt"])
-      else:
-        fecha_inicio = df.iloc[0]["fecha"]
-        fecha_fin = df.iloc[-1]["fecha"]
-      
-      f1 = datetime.strptime(fecha[0], '%Y-%m-%d')
-      f2 = datetime.strptime(fecha[-1], '%Y-%m-%d')
-      
-      date_id = datetime(fecha_inicio.year, fecha_inicio.month, fecha_inicio.day)
-      date_i = datetime(f1.year, f1.month, f1.day)
-      date_fd = datetime(fecha_fin.year, fecha_fin.month, fecha_fin.day)
-      date_f = datetime(f2.year, f2.month, f2.day)
-      col = df.columns
-      if date_i>=date_id and date_f<= date_fd:
-        if not "fecha" in df.columns:
-          df['fecha'] = [datetime.fromtimestamp(x) for x in df['valid_time_gmt']]
-        df = df.set_index("fecha")
-        tmp = df[fecha[0]:fecha[-1]]
-        tmp.reset_index(inplace=True)
-        df = tmp
-        if not "fecha" in col:
-          del df['fecha']
-      else:
-        print("Las fechas solicitadas estan fuera del rango de la data")
-      return df
+    def cargar_data(self,caso,stations,fechaInicio, fechaFinal,archivo):
+        if  (caso==1):
+            self.data = self.fetch_housing_data(stations, fechaInicio, fechaFinal)
+            if(len(stations) > archivo):
+                nombre = "{}_weather.csv".format(stations[archivo].replace(":","_"))
+                self.data = self.load_weather_data(nombre)
+        elif (caso ==0):
+            if (len(stations) > archivo):
+                nombre = "{}_weather.csv".format(stations[archivo].replace(":","_"))
+                self.data = self.load_weather_data(nombre)
+                self.fechaInicio = fechaInicio
+                self.fechaFinal = fechaFinal
+        return self.data
+    
     # funcion que muestra las proporciones de la columna en la data
     def col_cat_proportions(self, data, col):
         return data[col].value_counts() / len(data)
@@ -753,103 +716,92 @@ class DataBase():
         plt.savefig(path, format=fig_extension, dpi=resolution)
 
 
-    # Funcion que devuelve la data determinada por columnas y fechas
-    # tipo = por dia, mes, año, etc
+
     def get_part_data(self,columnas=[], rows=10, tipo='all', desde=''):
       data = self.data
-      if data.shape[0]<rows:
-        raise SystemExit("Reduzca el numero de filas, maximo: {}".format(data.shape[0]))
-      
-      fechas = []
-      f_f = self.get_fecha(data.iloc[-1]["fecha"],True,False)
       if desde !='':
-        fechas =[desde, f_f]
-        data = self.get_data_fecha(data,fechas)
-        if data.size <=0:
-          print("Error: Fecha {} no encontrada".format(desde))
-          sys.exit()
-      else:
-        desde = data.iloc[0]["fecha"]
-        fechas =[desde, f_f]
-      
+        fila = data.loc[(data['fecha'] == desde)]
+        indice = next(iter(data[data['fecha']==desde].index), 'no match')
+        if indice !="no match":
+          data = data[indice:len(data)]
+          data = data.reset_index(drop=True)
+        else: 
+          print('Error: Fecha no encontrada')
+
       if tipo == "day":
-        fin = datetime.strptime(fechas[1], '%Y-%m-%d').date()
+        last = data.iloc[-1]['fecha']
+        fin = datetime.strptime(str(last), '%Y-%m-%d %H:%M:%S').date()
         
         start_date = desde
-        end_date = fin.strftime('%Y-%m-%d')
-        
+        end_date = fin.strftime('%Y/%m/%d')
         dates = self.get_lista_fechas(start_date,end_date,'day')
-      
-      # verificamos que existan las filas pedidas y extraemos solo lo pedido 
-      if rows <= len(dates):
-        del dates[rows:]
-      else:
-        raise SystemExit('El numero de filas solicitadas "{}" es mayor al tamaño del dataset "{}"'.format(rows, len(dates)))
-      
-      data = data.set_index("fecha")
+        
+        if rows <= len(dates):
+          del dates[rows:]
+        else:
+          print('El numero de filas solicitadas {} es mayor al tamaño del dataset {}'.format(row, len(dates)))
+
       if len(columnas)>0:
+        if not "fecha" in columnas:
+          columnas.insert(0,"fecha")
         data = data[columnas]
-      
-      list_indices =[]
+
+      lista = []
       for col in columnas:
-        new_col = "mean"+col
-        data[new_col] = data[col].median()
-        # agregar min y max
-        if col.find("total_rain")==-1:
-          new_col_max = "max"+col
-          data[new_col_max] = data[col].max()
-          new_col_min = "min"+col
-          data[new_col_min] = data[col].min()
-        #
-        i=-1;
-        for date in dates:
-          i=i+1
-          f_incio = self.get_fecha(date,True,False)
-          df = data[f_incio:f_incio]
-          # Si no encuentra data para esa fecha agregar fila con data del dia anterior
-          if df.empty:
-            f_anterior = dates[i-1]
-            df = data[f_anterior:f_anterior]
-            df.reset_index(inplace=True)
-            df.loc[0,"fecha"] = date
-            df.set_index("fecha",inplace=True)
-            f_anterior_str = self.get_fecha(f_anterior,True,False)
-            data_anterior = data[f_anterior_str:f_anterior_str]            
-            df1 = data[dates[0]:f_anterior_str]
-            f_posterior = self.get_fecha(dates[i+1],True,False)
-            f_end_str = self.get_fecha(dates[-1],True,False)
-            df2 = data[f_posterior:f_end_str]
-            frames = [df1, df,df2]
-            data = pd.concat(frames)
+        if col != "fecha":
+          lista = []
+          data['check']= 0
+          new_col = "mean"+col
+          data[new_col] = data[col].median()
 
-          index = pd.to_datetime(df.head(1).index.values[0])
-          index_str = self.get_fecha(index,True,True)
-          list_indices.append(index_str)
+          for date in dates:
+            date1 = datetime(date.year, date.month, date.day)
+            list_indices =[]
+            recorrer = True
+            for i in data.index:
+              if data.iloc[i]['check']==0:
+                timestamp = data.iloc[i]['fecha']
+                date2 = datetime(timestamp.year, timestamp.month, timestamp.day)
+                if date1 == date2:
+                  list_indices.insert(0,i)
+                  data.at[i,"check"]= 1
+                elif date1 < date2:
+                  recorrer = False
+              if not recorrer:
+                break
 
-          median = df[col].median()
-          data.loc[f_incio,new_col] = median
-          #print('para la fecha: {} la {} media es {}'.format(date,col,median))
-          # agrega min y max
-          if col.find("total_rain")==-1:
-            max_value = df[col].max()
-            data.loc[f_incio,new_col_max] = max_value
-            min_value = df[col].min()
-            data.loc[f_incio,new_col_min] = min_value
-          #
-      list_indices= list_indices[0:rows]
-      data = data.loc[list_indices]
-      if data.shape[0]>0 and data.shape[1]:
-        for i in range(0,len(columnas)):
-          col = columnas[i]
-          del data[col]
-        print("Proceso exitoso: Data extraida")
-      return data
+            inicio = list_indices[-1]
+            fin = list_indices[0]
+            lista.append([inicio,fin])
+            data_day = data[inicio:fin]
+            median = data_day[col].median()
+            #print('para la fecha: {} la {} media es {}'.format(date,col,median))
+
+            for i in range(inicio,fin):
+              data.at[i,new_col]= median
+
+      data = data[0:lista[-1][1]+1]
+      for ele in lista:
+        a = ele[0]+1
+        b = ele[1]+1
+        for k in range(a,b):
+          data.drop([k], inplace = True )
+
+      temp = data.head(rows)
+      temp = temp.reset_index(drop=True)
+
+      for col in columnas:
+        if col != "fecha":
+          del temp[col]
+      del temp['check']
+      return temp
 
     def get_lista_fechas(self,start_date, end_date, tipo):
       start = parser.parse(start_date)
       end = parser.parse(end_date)
       if tipo == "day":
         dates = list(rrule.rrule(rrule.DAILY, dtstart=start, until=end))
+
       return dates
 
     def get_fecha(self,fecha,date=True, time = False):
@@ -863,14 +815,14 @@ class DataBase():
       
       return value
     
-    def get_n_dia_before(self,data,n=3):
+    def get_n_dia_before(self,data,features,n=3):
       # target measurement of mean temperature
-      for feature in data.columns:
+      for feature in features:
         if feature != 'fecha':
-          # 1 day prior
-          for N in range(1, n+1):
-            data = self.derive_nth_day_feature(data, feature, N)
-      print("Proceso Exitoso: Derivado los {}-dias desde {} hasta {}".format(n,data.columns[0],data.columns[-1]))
+            # 1 day prior
+            for N in range(1, n+1):
+                data = self.derive_nth_day_feature(data, feature, N)
+      print(data.columns)
       return data
 
     def derive_nth_day_feature(self,df, feature, N):
@@ -885,327 +837,3 @@ class DataBase():
       df[col_name] = nth_prior_measurements
       return df
       
-    def remove_col(self, df,features, columnas=['meantemp', 'mintemp', 'maxtemp']):
-      # make list of original features without meantempm, mintempm, and maxtempm
-      to_remove = [feature 
-                  for feature in features 
-                  if feature not in columnas]
-      for x in range(0,len(to_remove)):
-        elemento = to_remove[x]
-        name = 'mean'+elemento
-        to_remove.append(name)
-        name = 'min'+elemento
-        to_remove.append(name)
-        name = 'max'+elemento
-        to_remove.append(name)
-      # make a list of columns to keep
-      to_keep = [col for col in df.columns if col not in to_remove]
-
-      # select only the columns in to_keep and assign to df
-      df = df[to_keep]
-      print("Proceso exitoso: Se han removido las columnas, desde '{}' hasta '{}'".format(to_remove[0], to_remove[-1]))
-      return df
-
-    def cambiar_index(self,df,columna):
-      df = df.set_index(columna)
-      return df
-    # Funcion que muestra una descripcion de la data para determinar los valores atipicos
-    def valores_atipicos(self,df):
-      # Call describe on df and transpose it due to the large number of columns
-      spread = df.describe().T
-      # precalculate interquartile range for ease of use in next calculation
-      IQR = spread['75%'] - spread['25%']
-      # create an outliers column which is either 3 IQRs below the first quartile or
-      # 3 IQRs above the third quartile
-      spread['outliers'] = (spread['min']<(spread['25%']-(3*IQR)))|(spread['max'] > (spread['75%']+3*IQR))
-      spread['o_min'] = (spread['min']<(spread['25%']-(3*IQR)))
-      spread['o_max'] = (spread['max'] > (spread['75%']+3*IQR))
-      spread['IQR_min'] = spread['25%']-(3*IQR)
-      spread['IQR_max'] = spread['75%']+3*IQR
-      # just display the features containing extreme outliers
-      print("Los valores han sido registrados")
-      #print(spread.loc[spread.outliers,:])
-      df = spread.loc[spread.outliers,:]
-      lista = df.index.to_list()
-      return df, lista
-
-    # Funcion que muestra histograma para los valores atipicos
-    def ver_histograma(self,df,columnas):
-      for m in range(0,len(columnas)):
-        col = columnas[m][0]
-        plt.rcParams['figure.figsize'] = [14, 8]
-        df[col].hist()
-        plt.title('Distribution of {}'.format(col))
-        plt.xlabel(col)
-        plt.show()
-    
-    #Funcion que segun los valores atipicos trata la data
-    def extraer_caracteristicas_atipicas(self,data,atipicos):
-      if len(atipicos)>0:
-        grupos =[]
-        for x in range(0,len(atipicos)):
-          col = str(atipicos[x])
-          col_s=""
-          
-          if col.find("_")>=0:
-            arr = col.split("_")
-            if len(arr)>2:
-              arr.pop()
-              col_s = '_'.join(arr)
-            else:
-              col_s = arr[0]
-          if col_s !="":
-            grupos.append(col_s)
-        grupos = list(dict.fromkeys(grupos))
-        
-        l_i =[]
-        lista = []
-        k=0
-        for i in range(0,len(grupos)):
-          ele_1 = grupos[i]
-          for j in range(k,len(atipicos)):
-            ele_2 = atipicos[j]
-            if ele_2.find(ele_1)>=0:
-              l_i.append(j)
-              lista.append([atipicos[j],j])
-              k=j
-              break;
-      print("Los datos atipicos han sido extraidos")
-      return lista
-    
-    # Funcion que trata los valores atipicos
-    def tratar_atipicos(self, df, atipicos, indices, altitud):
-      altitud = float(altitud)
-      if atipicos.shape[0]>0 and len(indices)>0:
-        indices = atipicos.index.to_list()
-        for i in range(0,len(indices)):
-          elemento = [indices[i],i]
-          if elemento[0].find("maxtemp")!=-1:
-            if altitud >= 2000 and altitud<=4000:
-              max_temperatura = 30
-              max_temp_atipica = atipicos.iloc[elemento[1]]["max"]
-              # Si la temp maxima es mayor a la temperatura historica que se conoce (25) 
-              # pero por el aumento de °T se considerara hasta 30°C, tomando en cuenta que un dia pudo no haber viento ni humedad,
-              # y que el senahmi pronostico sequias en toda la region
-              # entonces existio un error en la medicion del sensor, se eliminara toda la fila
-              # para garantizar que la data recibida ese dia no haya sido una medida errada 
-              # en los otros sensores
-              if float(max_temp_atipica)>max_temperatura:
-                df = self.tratar_columna_atipica(df,atipicos,elemento,True)
-                #tmp = df.loc[(df[elemento[0]] > max_temperatura)]
-                #filas = tmp.index.to_list()
-                #df.drop(filas, inplace=True)
-                
-          elif elemento[0].find("mintemp")!=-1:
-            if altitud >= 2000 and altitud<=4000:
-              min_temperatura = -10
-              min_temp_atipica = atipicos.iloc[elemento[1]]["min"]
-              if float(min_temp_atipica)>min_temperatura:
-                df = self.tratar_columna_atipica(df,atipicos,elemento,True)
-          # wind speed, la velocidad del viento ha ido aumentando y variando, solo se vera los valores sin modificarse
-          elif elemento[0].find("wind_speed")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento)
-          # Si el atipico es mean rocio y el valor medio es negativo, no se puede determinar la saturacion
-          # debido al clima seco o semi seco del cusco
-          # segun la grafica es multimodal
-          else:# rocio, humedad, presion
-            if elemento[0].find("mean")!=-1:
-              df = self.tratar_columna_atipica(df,atipicos,elemento)
-            else:
-              df = self.tratar_columna_atipica(df,atipicos,elemento,True)
-      else:
-        print("No existen valores atipicos que tratar.")
-      return df
-
-
-    def tratar_atipicos_del(self, df, atipicos, indices, altitud):
-      altitud = float(altitud)
-      if atipicos.shape[0]>0 and len(indices)>0:
-        for elemento in indices:
-          if elemento[0].find("maxtemp")!=-1:
-            if altitud >= 2000 and altitud<=4000:
-              max_temperatura = 30
-              max_temp_atipica = atipicos.iloc[elemento[1]]["max"]
-              # Si la temp maxima es mayor a la temperatura historica que se conoce (25) 
-              # pero por el aumento de °T se considerara hasta 30°C, tomando en cuenta que un dia pudo no haber viento ni humedad,
-              # y que el senahmi pronostico sequias en toda la region
-              # entonces existio un error en la medicion del sensor, se eliminara toda la fila
-              # para garantizar que la data recibida ese dia no haya sido una medida errada 
-              # en los otros sensores
-              if float(max_temp_atipica)>max_temperatura:
-                df = self.tratar_columna_atipica(df,atipicos,elemento)
-                #tmp = df.loc[(df[elemento[0]] > max_temperatura)]
-                #filas = tmp.index.to_list()
-                #df.drop(filas, inplace=True)
-                
-          elif elemento[0].find("mintemp")!=-1:
-            if altitud >= 2000 and altitud<=4000:
-              min_temperatura = -10
-              min_temp_atipica = atipicos.iloc[elemento[1]]["min"]
-              if float(min_temp_atipica)>min_temperatura:
-                df = self.tratar_columna_atipica(df,atipicos,elemento)
-          # Si el atipico es mean rocio y el valor medio es negativo, no se puede determinar la saturacion
-          # debido al clima seco o semi seco del cusco
-          # segun la grafica es multimodal
-          elif elemento[0].find("meanrocio")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento,True)
-          elif elemento[0].find("maxrocio")!=-1:
-            fila = int(elemento[1])
-            tmp = atipicos[fila:fila+1]
-            std = tmp.iloc[0]["std"]
-            mean = tmp.iloc[0]["mean"]
-            min_ = tmp.iloc[0]["min"]
-            min_esperado = tmp.iloc[0]["25%"]-mean-std
-            # Si el minimo esperado es menor al min, existe un sesgo negativo
-            if min_esperado > min_:
-              df = self.tratar_columna_atipica(df,atipicos,elemento)
-          elif elemento[0].find("minrocio")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento)
-          elif elemento[0].find("meanpresion")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento,True)
-          elif elemento[0].find("minpresion")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento,True)
-          # max humedad
-          elif elemento[0].find("maxhumedad")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento,True)
-          # max wind speed
-          elif elemento[0].find("maxwind_speed")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento)
-          # mean wind speed
-          elif elemento[0].find("meanwind_speed")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento)
-          # min wind speed
-          elif elemento[0].find("minwind_speed")!=-1:
-            df = self.tratar_columna_atipica(df,atipicos,elemento)
-
-      else:
-        print("No existen valores atipicos que tratar.")
-      return df
-    # Funcion que limpia la data de la columna
-    # df = data
-    # elemento = ["temp",1]: columna y el indice
-    # atipicos = dataframe con los valores atipicos
-    def tratar_columna_atipica(self,df, atipicos,elemento, delete=False,show=False):
-      fila = int(elemento[1])
-      atipico = atipicos[fila:fila+1]
-      if show:
-        pd.set_option('max_columns', None)
-        print(atipico)
-        pd.reset_option("max_columns")
-      outliers_min = atipico.iloc[0]["o_min"]
-      outliers_max = atipico.iloc[0]["o_max"]
-      # Si el minimo esperado es menor al min, existe un sesgo negativo
-      eliminar=-1
-      if outliers_min:
-        min_ = round(atipico.iloc[0]["min"],2)
-        min_aceptado = round(atipico.iloc[0]["IQR_min"],2)
-        tmp = df.loc[(df[elemento[0]] < min_aceptado)]
-        if elemento[0].find("min")!=-1:
-          eliminar = tmp.shape[0]
-        print("{}: Existe un sesgo negativo en {} con un min: {} que sobrepasa el aceptado: '{}' En {} filas".format(elemento,elemento[0], min_, round(min_aceptado,2),tmp.shape[0]))
-      elif outliers_max:
-        max_ = round(atipico.iloc[0]["max"],2)
-        max_aceptado = round(atipico.iloc[0]["IQR_max"],2)
-        tmp = df.loc[(df[elemento[0]] > max_aceptado)]
-        if elemento[0].find("max")!=-1:
-          eliminar = tmp.shape[0]
-        print("{}: Existe un sesgo positivo en {} con un max: {} que sobrepasa el aceptado: '{}' En {} filas".format(elemento,elemento[0], max_, round(max_aceptado,2),tmp.shape[0]))
-      if eliminar>0 and eliminar <= round(df.shape[0]*0.01,1) and delete:
-        filas = tmp.index.to_list()
-        df.drop(filas, inplace=True)
-      return df
-    # Funcion que procesa la data ya tratada
-    def procesar_data(self,df):
-      # iterate over the precip columns
-      for col in df.columns:
-        if col.find("total_rain")!=-1:
-          # create a boolean array of values representing nans
-          missing_vals = pd.isnull(df[col])
-          df[col][missing_vals] = 0
-      # Eliminamos los null
-      df = df.dropna()
-      print("La data ha sido procesada")
-      return df
-    
-    # Funcion que muestra la correlacion de la data con la col="temp"
-    def coef_corr(self,df,col='meantemp'):
-      coef = df.corr()[[col]].sort_values(col)
-      return coef
-
-    # def que selecciona las caracteristicas dependiendo del coef de correlacion
-    def seleccionar_predictores(self,df, indice=0.6):
-      coef = self.coef_corr(df)
-      coef["meantemp"] = round(coef["meantemp"],1)
-      indice_n = indice*(-1)
-      coef_lista = coef.loc[(coef["meantemp"] >= indice) | (coef["meantemp"] <= indice_n)]
-      predictors = coef_lista.index.to_list()
-      df2 = df[predictors]
-      df2 = df2.reindex(sorted(df2.columns), axis=1)
-      print("Operacion Exitosa: Predictores seleccionados")
-      return df2
-
-    def ver_relaciones(self,df,N=3):
-      if df.shape[1]>0 and df.shape[0>0] and N>0:
-        predictors = list(df.columns)
-        predictors.remove("meantemp")
-        n_predictors = len(predictors)
-        predictors_1=[]
-        predictors_2=[]
-        n_columnas = N
-
-        if n_columnas>=4:
-          n_columnas=3
-
-        if n_predictors>=n_columnas:
-          n_filas = int(n_predictors/n_columnas)
-          n_elementos = n_filas*n_columnas
-          predictors_1 = predictors[0:n_elementos]
-          if n_filas==1:
-            fig, axes = plt.subplots(nrows=n_filas+1, ncols=n_columnas , figsize=(18,12), sharey=True)
-          else:
-            fig, axes = plt.subplots(nrows=n_filas, ncols=n_columnas , figsize=(18, n_elementos+5), sharey=True)
-          arr = np.array(predictors_1).reshape(n_filas, 3)
-          if n_predictors%3!=0:
-            predictors_2 = predictors[n_elementos:n_predictors]
-            col = len(predictors_2)
-            if col ==1:
-              fig1,axes1 = plt.subplots(nrows=2, ncols=2, figsize=(12, 12), sharey=True)
-            else:
-              fig1,axes1 = plt.subplots(nrows=2, ncols=col, figsize=(22/col, 5*col), sharey=True)
-            arr1 = np.array(predictors_2).reshape(1,col)
-        else:
-          fig, axes = plt.subplots(nrows=2, ncols=n_predictors , figsize=(18,22), sharey=True)
-          arr = np.array(predictors).reshape(1,n_predictors)
-
-        for row, col_arr in enumerate(arr):
-          for col, feature in enumerate(col_arr):
-            axes[row, col].scatter(df[feature], df['meantemp'])
-            if col == 0:
-              axes[row, col].set(xlabel=feature, ylabel='meantemp')
-            else:
-              axes[row, col].set(xlabel=feature)
-        
-        if len(predictors_2)>0:
-          for row, col_arr in enumerate(arr1):
-            for col, feature in enumerate(col_arr):
-              print(row,col,feature)
-              print(arr1[row,col])
-              axes1[row, col].scatter(df[feature], df['meantemp'])
-              if col == 0:
-                axes1[row, col].set(xlabel=feature, ylabel='meantemp')
-              else:
-                axes1[row, col].set(xlabel=feature)
-        plt.show()
-      else: 
-        print("El dataframe esta vacío")
-        
-    def modelo_escalonado(self,df):
-      predictors = list(df.columns)
-      predictors.remove("meantemp")
-      # separate our my predictor variables (X) from my outcome variable y
-      X = df[predictors]
-      y = df['meantemp']
-      # Add a constant to the predictor variable set to represent the Bo intercept
-      X = sm.add_constant(X)
-      X.ix[:5, :5]
-      print("joha")
