@@ -1207,5 +1207,5 @@ class DataBase():
       y = df['meantemp']
       # Add a constant to the predictor variable set to represent the Bo intercept
       X = sm.add_constant(X)
-      X.ix[:5, :5]
-      print("joha")
+      X.iloc[:5, :5]
+      print(X.iloc[:5, :5])
