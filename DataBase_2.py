@@ -1188,6 +1188,8 @@ class DataBase():
         if len(predictors_2)>0:
           for row, col_arr in enumerate(arr1):
             for col, feature in enumerate(col_arr):
+              print(row,col,feature)
+              print(arr1[row,col])
               axes1[row, col].scatter(df[feature], df['meantemp'])
               if col == 0:
                 axes1[row, col].set(xlabel=feature, ylabel='meantemp')
@@ -1196,67 +1198,14 @@ class DataBase():
         plt.show()
       else: 
         print("El dataframe esta vacío")
-
-    # Funcion que automatiza la regresion en escalada para 
-    # seleccionar predictores estadísticamente significativos (características)
-    def modelo_escalonado(self,df,iteraciones=3):
+        
+    def modelo_escalonado(self,df):
       predictors = list(df.columns)
       predictors.remove("meantemp")
-      n_columnas = len(predictors)
-      if n_columnas>=iteraciones:
-        # separate our my predictor variables (X) from my outcome variable y
-        X = df[predictors]
-        y = df['meantemp']
-        # Add a constant to the predictor variable set to represent the Bo intercept
-        X = sm.add_constant(X)
-        #print(X.iloc[:5, :5])
-        # (1) select a significance value
-        alpha = 0.05
-        # (2) Fit the model
-        model = sm.OLS(y, X).fit()
-        # (3) evaluate the coefficients' p-values
-        #print(model.summary())
-        #print(model.params)
-        #print("Operacion exitosa:Los parametros iniciales son\n{}".format(model.params))
-        for i in range(0,iteraciones):
-          parametros = model.pvalues
-          parametros = parametros.drop(labels=['const'])
-          max_idvalue = parametros.idxmax()
-          max_value = parametros.max()
-          if max_value>=alpha:
-            print("El parametro a eliminar es: {} con un valor de: {:.4f}".format(max_idvalue,max_value))
-            # (3) cont. - Identify the predictor with the greatest p-value and assess if its > our selected alpha.
-            #             based off the table it is clear that meandewptm_3 has the greatest p-value and that it is
-            #             greater than our alpha of 0.05
-            # (4) - Use pandas drop function to remove this column from X
-            X = X.drop(max_idvalue, axis=1)
-            parametros = parametros.drop(labels=[max_idvalue])
-            # (5) Fit the model 
-            model = sm.OLS(y, X).fit()
-          else:
-            print("El maximo valor del parametro '{}' de valor: {:.4f} es menor o = a {}".format(max_idvalue,max_value,alpha))
-            break;
-          #print(model.summary())
-        print("Operacion exitosa:Los parametros que restan son\n")
-        print(model.summary())
-        return model, X,y
-      else:
-        print("El numero max de iteraciones es: {}".format(len(predictors)))  
-        return None,None,None
-      
-      # Funcion que divide la data en test and set
-    def dividir_data(self, X, y):
-      # first remove the const column because unlike statsmodels, SciKit-Learn will add that in for us
-      X = X.drop('const', axis=1)
-      X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=12)
-      X_list = [X_train,X_test]
-      Y_list = [y_train,y_test]
-      print("Data dividida")
-      return X_list, Y_list
-
-
-
-
-
-
-
+      # separate our my predictor variables (X) from my outcome variable y
+      X = df[predictors]
+      y = df['meantemp']
+      # Add a constant to the predictor variable set to represent the Bo intercept
+      X = sm.add_constant(X)
+      X.iloc[:5, :5]
+      print(X.iloc[:5, :5])

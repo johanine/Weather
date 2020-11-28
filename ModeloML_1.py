@@ -3,7 +3,6 @@ from DataBase import DataBase
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
-from sklearn.metrics import median_absolute_error
 from sklearn.pipeline import Pipeline
 import numpy as np
 from sklearn.tree import DecisionTreeRegressor
@@ -14,7 +13,6 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.svm import SVR
-
 
 class ModeloML():
     def __init__(self, dataBase):
@@ -186,24 +184,3 @@ class ModeloML():
         svm_rmse_scores = np.sqrt(-svm_scores)
         svm_rmse_scores.mean()
         svm_rmse_scores.std()
-
-
-    # Funcion que crea el modelo de regresión mediante el conjunto de datos de entrenamiento
-    def crear_modelo_RL(self, X, y):
-      X_train, X_test, y_train, y_test = X[0],X[1],y[0],y[1]
-      # instantiate the regressor class
-      regressor = LinearRegression()
-      # fit the build the model by fitting the regressor to the training data
-      regressor.fit(X_train, y_train)
-      # make a prediction set using the test set
-      prediction = regressor.predict(X_test)
-
-      # Evaluate the prediction accuracy of the model
-      print("The Explained Variance: %.2f" % regressor.score(X_test, y_test))
-      print("The Mean Absolute Error: %.2f degrees celsius" % mean_absolute_error(y_test, prediction))
-      print("The Median Absolute Error: %.2f degrees celsius" % median_absolute_error(y_test, prediction))
-      print("Predictions:\t", prediction)
-
-
-
-
